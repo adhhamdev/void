@@ -1,149 +1,142 @@
 "use client"
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Shield, Key, Users, Settings, History, Folder, ChevronDown, ChevronRight, Plus } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { NavigationLink } from "./navigation-link"
+import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  LayoutDashboard,
+  Key,
+  Users,
+  Settings,
+  FileText,
+  Shield,
+  LogOut,
+  User,
+  ChevronDown,
+  Menu,
+  X,
+} from "lucide-react"
+import { NavigationLink } from "@/components/navigation-link"
+import { useAuth } from "@/components/auth-provider"
+
+const navigation = [
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Secrets", href: "/secrets", icon: Key },
+  { name: "Team", href: "/team", icon: Users },
+  { name: "Logs", href: "/logs", icon: FileText },
+  { name: "Settings", href: "/settings", icon: Settings },
+]
 
 export function Sidebar() {
-  const [expandedProjects, setExpandedProjects] = useState<string[]>(["web-app"])
+  const { user, signOut } = useAuth()
   const pathname = usePathname()
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
-  const projects = [
-    {
-      id: "web-app",
-      name: "Web Application",
-      folders: ["Authentication", "Database", "External APIs"],
-      environment: "production",
-    },
-    {
-      id: "mobile-app",
-      name: "Mobile App",
-      folders: ["Push Notifications", "Analytics"],
-      environment: "staging",
-    },
-    {
-      id: "api-service",
-      name: "API Service",
-      folders: ["Core Services", "Third Party"],
-      environment: "development",
-    },
-  ]
+  const handleSignOut = async () => {
+    await signOut()
+  }
 
-  const toggleProject = (projectId: string) => {
-    setExpandedProjects((prev) =>
-      prev.includes(projectId) ? prev.filter((id) => id !== projectId) : [...prev, projectId],
-    )
+  const getUserInitials = () => {
+    if (user?.user_metadata?.full_name) {
+      return user.user_metadata.full_name
+        .split(" ")
+        .map((n: string) => n[0])
+        .join("")
+        .toUpperCase()
+    }
+    return user?.email?.charAt(0).toUpperCase() || "U"
   }
 
   return (
-    <div className="w-64 bg-white border-r border-slate-200 flex flex-col">
-      {/* Logo */}
-      <div className="p-6 border-b border-slate-200">
-        <div className="flex items-center space-x-2">
-          <div className="bg-emerald-100 p-2 rounded-lg">
-            <Shield className="h-6 w-6 text-emerald-600" />
+    <>
+      {/* Mobile menu button */}
+      <div className="lg:hidden fixed top-4 left-4 z-50">
+        <Button variant="outline" size="sm" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+          {isMobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+        </Button>
+      </div>
+
+      {/* Mobile overlay */}
+      {isMobileMenuOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div
+        className={`
+        fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-200 ease-in-out
+        ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+      `}
+      >
+        <div className="flex flex-col h-full">
+          {/* Logo */}
+          <div className="flex items-center space-x-2 px-6 py-4 border-b border-slate-200">
+            <Shield className="h-8 w-8 text-emerald-600" />
+            <span className="text-xl font-bold text-slate-900">SecureVault</span>
           </div>
-          <div>
-            <h2 className="font-semibold text-slate-900">SecureVault</h2>
-            <p className="text-xs text-slate-500">Enterprise</p>
+
+          {/* Navigation */}
+          <nav className="flex-1 px-4 py-6 space-y-2">
+            {navigation.map((item) => (
+              <NavigationLink
+                key={item.name}
+                href={item.href}
+                icon={item.icon}
+                isActive={pathname.startsWith(item.href)}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                {item.name}
+              </NavigationLink>
+            ))}
+          </nav>
+
+          {/* User Menu */}
+          <div className="border-t border-slate-200 p-4">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="w-full justify-start p-2">
+                  <Avatar className="h-8 w-8 mr-3">
+                    <AvatarImage src={user?.user_metadata?.avatar_url || "/placeholder.svg"} />
+                    <AvatarFallback className="bg-emerald-100 text-emerald-700">{getUserInitials()}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 text-left">
+                    <p className="text-sm font-medium text-slate-900">
+                      {user?.user_metadata?.full_name || user?.email?.split("@")[0]}
+                    </p>
+                    <p className="text-xs text-slate-500">{user?.email}</p>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-slate-400" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem asChild>
+                  <Link href="/settings" className="flex items-center">
+                    <User className="mr-2 h-4 w-4" />
+                    Profile Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut} className="text-red-600">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2">
-        <div className="space-y-1">
-          <NavigationLink href="/dashboard">
-            <Key className="mr-3 h-4 w-4" />
-            All Secrets
-          </NavigationLink>
-          <NavigationLink href="/team">
-            <Users className="mr-3 h-4 w-4" />
-            Team
-          </NavigationLink>
-          <NavigationLink href="/logs">
-            <History className="mr-3 h-4 w-4" />
-            Access Logs
-          </NavigationLink>
-          <NavigationLink href="/settings">
-            <Settings className="mr-3 h-4 w-4" />
-            Settings
-          </NavigationLink>
-        </div>
-
-        <div className="pt-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium text-slate-700">Projects</h3>
-            <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-              <Plus className="h-3 w-3" />
-            </Button>
-          </div>
-
-          <div className="space-y-1">
-            {projects.map((project) => (
-              <div key={project.id}>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start p-2 h-auto"
-                  onClick={() => toggleProject(project.id)}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <div className="flex items-center">
-                      {expandedProjects.includes(project.id) ? (
-                        <ChevronDown className="mr-2 h-3 w-3" />
-                      ) : (
-                        <ChevronRight className="mr-2 h-3 w-3" />
-                      )}
-                      <Folder className="mr-2 h-4 w-4 text-slate-500" />
-                      <Link href={`/projects/${project.id}`} className="text-sm hover:underline">
-                        {project.name}
-                      </Link>
-                    </div>
-                    <Badge variant={project.environment === "production" ? "default" : "secondary"} className="text-xs">
-                      {project.environment.slice(0, 4)}
-                    </Badge>
-                  </div>
-                </Button>
-
-                {expandedProjects.includes(project.id) && (
-                  <div className="ml-6 space-y-1">
-                    {project.folders.map((folder, index) => (
-                      <Link key={folder} href={`/folders/${project.id}-${index}`}>
-                        <Button
-                          variant="ghost"
-                          className="w-full justify-start text-sm text-slate-600 h-8 hover:bg-slate-100"
-                        >
-                          <Folder className="mr-2 h-3 w-3" />
-                          {folder}
-                        </Button>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </nav>
-
-      {/* User Profile */}
-      <Link href="/settings">
-        <div className="p-4 border-t border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
-              <span className="text-sm font-medium text-emerald-700">AC</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900 truncate">Alex Chen</p>
-              <p className="text-xs text-slate-500 truncate">alex@company.com</p>
-            </div>
-          </div>
-        </div>
-      </Link>
-    </div>
+    </>
   )
 }

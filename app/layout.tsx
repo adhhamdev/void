@@ -1,14 +1,14 @@
 import type React from "react"
-import type { Metadata } from "next"
 import { Inter } from "next/font/google"
-import "./globals.css"
 import { AuthProvider } from "@/components/auth-provider"
+import { Toaster } from "@/components/ui/toaster"
+import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
 
-export const metadata: Metadata = {
-  title: "SecureVault - Key Management Platform",
-  description: "Secure, developer-friendly secret management with AES-256 encryption",
+export const metadata = {
+  title: "SecureVault - Secret Management",
+  description: "Secure secret management for teams",
     generator: 'v0.dev'
 }
 
@@ -20,7 +20,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          {children}
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   )

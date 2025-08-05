@@ -1,17 +1,15 @@
 import Link from "next/link"
-import { Shield, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Shield, ArrowLeft } from "lucide-react"
 
-export default function Unauthorized() {
+export default function UnauthorizedPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="bg-red-100 p-3 rounded-full">
-              <Shield className="h-8 w-8 text-red-600" />
-            </div>
+            <Shield className="h-12 w-12 text-red-500" />
           </div>
           <CardTitle>Access Denied</CardTitle>
           <CardDescription>
@@ -19,7 +17,7 @@ export default function Unauthorized() {
             an error.
           </CardDescription>
         </CardHeader>
-        <CardContent className="text-center space-y-3">
+        <CardContent className="space-y-4">
           <Link href="/dashboard">
             <Button className="w-full bg-emerald-600 hover:bg-emerald-700">
               <ArrowLeft className="mr-2 h-4 w-4" />

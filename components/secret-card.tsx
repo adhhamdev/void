@@ -1,17 +1,24 @@
 "use client"
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Eye, EyeOff, Copy, MoreHorizontal, Database, Key, Globe, History, Edit, Trash2 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { MoreHorizontal, Eye, Copy, Edit, Trash2, Key, Database, Shield, Webhook, FileText } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 
 interface Secret {
   id: string
   name: string
-  description: string
+  description?: string
   lastModified: string
   environment: string
   type: string
@@ -21,57 +28,95 @@ interface SecretCardProps {
   secret: Secret
 }
 
+const getSecretIcon = (type: string) => {
+  switch (type) {
+    case "database":
+      return Database
+    case "auth":
+      return Shield
+    case "api":
+      return Webhook
+    case "certificate":
+      return FileText
+    default:
+      return Key
+  }
+}
+
+const getEnvironmentColor = (env: string) => {
+  switch (env) {
+    case "development":
+      return "bg-blue-100 text-blue-700"
+    case "staging":
+      return "bg-yellow-100 text-yellow-700"
+    case "production":
+      return "bg-red-100 text-red-700"
+    default:
+      return "bg-slate-100 text-slate-700"
+  }
+}
+
 export function SecretCard({ secret }: SecretCardProps) {
-  const [isVisible, setIsVisible] = useState(false)
-  const [isCopied, setIsCopied] = useState(false)
+  const { toast } = useToast()
+  const [isLoading, setIsLoading] = useState(false)
+  const Icon = getSecretIcon(secret.type)
 
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case "database":
-        return Database
-      case "api":
-        return Globe
-      case "auth":
-        return Key
-      default:
-        return Key
+  const handleCopySecret = async () => {
+    setIsLoading(true)
+    try {
+      // In a real app, this would fetch and decrypt the secret
+      // For now, we'll just show a placeholder
+      await navigator.clipboard.writeText("***SECRET_VALUE***")
+      toast({
+        title: "Copied to clipboard",
+        description: `${secret.name} has been copied to your clipboard.`,
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to copy secret to clipboard.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case "database":
-        return "bg-blue-100 text-blue-700"
-      case "api":
-        return "bg-purple-100 text-purple-700"
-      case "auth":
-        return "bg-emerald-100 text-emerald-700"
-      default:
-        return "bg-slate-100 text-slate-700"
+  const handleDeleteSecret = async () => {
+    if (!confirm(`Are you sure you want to delete ${secret.name}?`)) return
+
+    setIsLoading(true)
+    try {
+      // Delete secret logic would go here
+      toast({
+        title: "Secret deleted",
+        description: `${secret.name} has been deleted.`,
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete secret.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
     }
   }
-
-  const handleCopy = () => {
-    setIsCopied(true)
-    setTimeout(() => setIsCopied(false), 2000)
-  }
-
-  const TypeIcon = getTypeIcon(secret.type)
 
   return (
-    <Link href={`/secrets/${secret.id}`}>
-      <Card className="hover:shadow-md transition-shadow cursor-pointer">
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center space-x-2">
-              <div className={`p-1.5 rounded-md ${getTypeColor(secret.type)}`}>
-                <TypeIcon className="h-4 w-4" />
-              </div>
-              <div>
-                <CardTitle className="text-base">{secret.name}</CardTitle>
-                <CardDescription className="text-sm">{secret.description}</CardDescription>
-              </div>
-            </div>
+    <Card className="hover:shadow-md transition-shadow">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Icon className="h-5 w-5 text-slate-500" />
+            <CardTitle className="text-base">
+              <Link href={`/secrets/${secret.id}`} className="hover:underline">
+                {secret.name}
+              </Link>
+            </CardTitle>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Badge className={getEnvironmentColor(secret.environment)}>{secret.environment}</Badge>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
@@ -79,43 +124,40 @@ export function SecretCard({ secret }: SecretCardProps) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link href={`/secrets/${secret.id}`} className="flex items-center">
+                    <Eye className="mr-2 h-4 w-4" />
+                    View Details
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleCopySecret} disabled={isLoading}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copy Value
+                </DropdownMenuItem>
                 <DropdownMenuItem>
                   <Edit className="mr-2 h-4 w-4" />
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <History className="mr-2 h-4 w-4" />
-                  View History
-                </DropdownMenuItem>
-                <DropdownMenuItem className="text-red-600">
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleDeleteSecret} disabled={isLoading} className="text-red-600">
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center space-x-2">
-            <div className="flex-1 bg-slate-100 rounded-md p-2 font-mono text-sm">
-              {isVisible ? "sk_live_51H..." : "••••••••••••••••"}
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => setIsVisible(!isVisible)} className="h-8 w-8 p-0">
-              {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleCopy} className="h-8 w-8 p-0">
-              <Copy className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="flex items-center justify-between text-sm">
-            <Badge variant={secret.environment === "production" ? "default" : "secondary"}>{secret.environment}</Badge>
-            <span className="text-slate-500">Updated {secret.lastModified}</span>
-          </div>
-
-          {isCopied && <div className="text-xs text-emerald-600 font-medium">Copied to clipboard!</div>}
-        </CardContent>
-      </Card>
-    </Link>
+        </div>
+        {secret.description && <CardDescription className="line-clamp-2">{secret.description}</CardDescription>}
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between text-sm text-slate-600">
+          <span>Updated {secret.lastModified}</span>
+          <Button variant="outline" size="sm" onClick={handleCopySecret} disabled={isLoading}>
+            <Copy className="h-4 w-4 mr-1" />
+            Copy
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

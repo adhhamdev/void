@@ -1,102 +1,70 @@
-import CryptoJS from "crypto-js"
+import crypto from "crypto"
 
-// Client-side encryption utilities
-export class CryptoUtils {
-  private static readonly ALGORITHM = "AES"
-  private static readonly KEY_SIZE = 256
-  private static readonly IV_SIZE = 128
-
-  // Generate a random encryption key
-  static generateKey(): string {
-    return CryptoJS.lib.WordArray.random(this.KEY_SIZE / 8).toString()
-  }
-
-  // Generate a random IV
-  static generateIV(): string {
-    return CryptoJS.lib.WordArray.random(this.IV_SIZE / 8).toString()
-  }
-
-  // Encrypt data with AES-256
-  static encrypt(data: string, key: string): { encrypted: string; iv: string } {
-    const iv = this.generateIV()
-    const encrypted = CryptoJS.AES.encrypt(data, key, {
-      iv: CryptoJS.enc.Hex.parse(iv),
-      mode: CryptoJS.mode.CBC,
-      padding: CryptoJS.pad.Pkcs7,
-    }).toString()
-
-    return { encrypted, iv }
-  }
-
-  // Decrypt data with AES-256
-  static decrypt(encryptedData: string, key: string, iv: string): string {
-    const decrypted = CryptoJS.AES.decrypt(encryptedData, key, {
-      iv: CryptoJS.enc.Hex.parse(iv),
-      mode: CryptoJS.mode.CBC,
-      padding: CryptoJS.pad.Pkcs7,
-    })
-
-    return decrypted.toString(CryptoJS.enc.Utf8)
-  }
-
-  // Hash data with SHA-256
-  static hash(data: string): string {
-    return CryptoJS.SHA256(data).toString()
-  }
-
-  // Generate HMAC for integrity checking
-  static generateHMAC(data: string, key: string): string {
-    return CryptoJS.HmacSHA256(data, key).toString()
-  }
-
-  // Verify HMAC
-  static verifyHMAC(data: string, key: string, hmac: string): boolean {
-    const computedHMAC = this.generateHMAC(data, key)
-    return computedHMAC === hmac
-  }
-
-  // Derive key from password using PBKDF2
-  static deriveKey(password: string, salt: string, iterations = 10000): string {
-    return CryptoJS.PBKDF2(password, salt, {
-      keySize: this.KEY_SIZE / 32,
-      iterations: iterations,
-    }).toString()
-  }
-
-  // Generate a secure random salt
-  static generateSalt(): string {
-    return CryptoJS.lib.WordArray.random(128 / 8).toString()
-  }
-}
-
-// Organization-level encryption key management
 export class OrganizationCrypto {
-  private orgKey: string
+  private masterKey: string
   private orgId: string
 
-  constructor(orgKey: string, orgId: string) {
-    this.orgKey = orgKey
+  constructor(masterKey: string, orgId: string) {
+    this.masterKey = masterKey
     this.orgId = orgId
   }
 
-  // Encrypt secret value for storage
+  // Derive organization-specific key
+  private deriveKey(): Buffer {
+    return crypto.pbkdf2Sync(this.masterKey, this.orgId, 100000, 32, "sha256")
+  }
+
+  // Encrypt secret value
   encryptSecret(value: string): { encryptedValue: string; valueHash: string } {
-    const { encrypted, iv } = CryptoUtils.encrypt(value, this.orgKey)
-    const encryptedValue = `${iv}:${encrypted}`
-    const valueHash = CryptoUtils.hash(value)
+    const key = this.deriveKey()
+    const iv = crypto.randomBytes(16)
+    const cipher = crypto.createCipher("aes-256-cbc", key)
+
+    let encrypted = cipher.update(value, "utf8", "hex")
+    encrypted += cipher.final("hex")
+
+    const encryptedValue = iv.toString("hex") + ":" + encrypted
+    const valueHash = crypto.createHash("sha256").update(value).digest("hex")
 
     return { encryptedValue, valueHash }
   }
 
   // Decrypt secret value
   decryptSecret(encryptedValue: string): string {
-    const [iv, encrypted] = encryptedValue.split(":")
-    return CryptoUtils.decrypt(encrypted, this.orgKey, iv)
+    const key = this.deriveKey()
+    const [ivHex, encrypted] = encryptedValue.split(":")
+    const iv = Buffer.from(ivHex, "hex")
+
+    const decipher = crypto.createDecipher("aes-256-cbc", key)
+    let decrypted = decipher.update(encrypted, "hex", "utf8")
+    decrypted += decipher.final("utf8")
+
+    return decrypted
   }
 
   // Verify secret integrity
-  verifySecret(value: string, storedHash: string): boolean {
-    const computedHash = CryptoUtils.hash(value)
-    return computedHash === storedHash
+  verifySecret(value: string, hash: string): boolean {
+    const computedHash = crypto.createHash("sha256").update(value).digest("hex")
+    return computedHash === hash
   }
+
+  // Generate secure API key
+  static generateApiKey(): string {
+    return "sk_" + crypto.randomBytes(32).toString("hex")
+  }
+
+  // Hash API key for storage
+  static hashApiKey(apiKey: string): string {
+    return crypto.createHash("sha256").update(apiKey).digest("hex")
+  }
+}
+
+// Generate master encryption key
+export function generateMasterKey(): string {
+  return crypto.randomBytes(32).toString("hex")
+}
+
+// Generate salt for key derivation
+export function generateSalt(): string {
+  return crypto.randomBytes(16).toString("hex")
 }

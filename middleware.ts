@@ -25,34 +25,26 @@ export async function middleware(request: NextRequest) {
     },
   )
 
-  // Refresh session if expired - required for Server Components
+  // Refresh session if expired
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
   // Protected routes
-  const protectedPaths = ["/dashboard", "/projects", "/secrets", "/team", "/logs", "/settings", "/folders"]
+  const protectedPaths = ["/dashboard", "/projects", "/secrets", "/team", "/settings", "/logs", "/folders"]
   const isProtectedPath = protectedPaths.some((path) => request.nextUrl.pathname.startsWith(path))
 
-  // Redirect to auth if accessing protected route without authentication
   if (isProtectedPath && !user) {
-    const redirectUrl = new URL("/auth", request.url)
-    redirectUrl.searchParams.set("next", request.nextUrl.pathname)
-    return NextResponse.redirect(redirectUrl)
+    const url = request.nextUrl.clone()
+    url.pathname = "/auth"
+    return NextResponse.redirect(url)
   }
 
-  // Redirect to dashboard if accessing auth while authenticated
+  // Redirect authenticated users away from auth pages
   if (request.nextUrl.pathname.startsWith("/auth") && user) {
-    return NextResponse.redirect(new URL("/dashboard", request.url))
-  }
-
-  // Redirect root to dashboard if authenticated, otherwise to auth
-  if (request.nextUrl.pathname === "/") {
-    if (user) {
-      return NextResponse.redirect(new URL("/dashboard", request.url))
-    } else {
-      return NextResponse.redirect(new URL("/auth", request.url))
-    }
+    const url = request.nextUrl.clone()
+    url.pathname = "/dashboard"
+    return NextResponse.redirect(url)
   }
 
   return supabaseResponse
