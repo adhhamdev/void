@@ -55,56 +55,77 @@ export default function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      // Fetch user's organizations and projects
-      const { data: orgMembers } = await supabase
+      // First get user's organizations
+      const { data: userOrgs, error: orgError } = await supabase
         .from("organization_members")
-        .select(`
-          organization_id,
-          organizations (
-            id,
-            name,
-            projects (
-              id,
-              name,
-              description,
-              created_at,
-              default_environment,
-              secrets (count),
-              folders (count)
-            )
-          )
-        `)
+        .select("organization_id")
         .eq("user_id", user?.id)
 
-      // Process projects data
-      const projectsData: Project[] = []
-      let totalSecrets = 0
-      let totalProjects = 0
+      if (orgError) {
+        console.error("Error fetching organizations:", orgError)
+        setLoading(false)
+        return
+      }
 
-      orgMembers?.forEach((member) => {
-        member.organizations?.projects?.forEach((project) => {
-          const secretCount = project.secrets?.[0]?.count || 0
-          const folderCount = project.folders?.[0]?.count || 0
+      if (!userOrgs || userOrgs.length === 0) {
+        setLoading(false)
+        return
+      }
 
-          projectsData.push({
-            id: project.id,
-            name: project.name,
-            description: project.description || "",
-            secret_count: secretCount,
-            folder_count: folderCount,
-            last_activity: project.created_at,
-            environment: project.default_environment || "development",
-          })
+      const orgIds = userOrgs.map((org) => org.organization_id)
 
-          totalSecrets += secretCount
-          totalProjects += 1
+      // Fetch projects for user's organizations
+      const { data: projectsData, error: projectsError } = await supabase
+        .from("projects")
+        .select(`
+          id,
+          name,
+          description,
+          created_at,
+          default_environment
+        `)
+        .in("organization_id", orgIds)
+        .order("created_at", { ascending: false })
+
+      if (projectsError) {
+        console.error("Error fetching projects:", projectsError)
+      } else {
+        // For each project, get secret and folder counts
+        const projectsWithCounts = await Promise.all(
+          (projectsData || []).map(async (project) => {
+            const [secretsResult, foldersResult] = await Promise.all([
+              supabase.from("secrets").select("id", { count: "exact" }).eq("project_id", project.id),
+              supabase.from("folders").select("id", { count: "exact" }).eq("project_id", project.id),
+            ])
+
+            return {
+              id: project.id,
+              name: project.name,
+              description: project.description || "",
+              secret_count: secretsResult.count || 0,
+              folder_count: foldersResult.count || 0,
+              last_activity: project.created_at,
+              environment: project.default_environment || "development",
+            }
+          }),
+        )
+
+        setProjects(projectsWithCounts)
+
+        // Calculate stats
+        const totalSecrets = projectsWithCounts.reduce((sum, p) => sum + p.secret_count, 0)
+        const totalProjects = projectsWithCounts.length
+
+        setStats({
+          totalSecrets,
+          totalProjects,
+          totalTeamMembers: userOrgs.length,
+          recentActivity: 0,
         })
-      })
-
-      setProjects(projectsData)
+      }
 
       // Fetch recent activity
-      const { data: activities } = await supabase
+      const { data: activities, error: activitiesError } = await supabase
         .from("audit_logs")
         .select(`
           id,
@@ -114,28 +135,24 @@ export default function Dashboard() {
           created_at,
           profiles (full_name, email)
         `)
+        .in("organization_id", orgIds)
         .order("created_at", { ascending: false })
         .limit(10)
 
-      const activityData: RecentActivity[] =
-        activities?.map((activity) => ({
+      if (!activitiesError && activities) {
+        const activityData: RecentActivity[] = activities.map((activity) => ({
           id: activity.id,
           action: activity.action,
           resource_type: activity.resource_type,
-          resource_name: activity.metadata?.secret_name || "Unknown",
+          resource_name:
+            (activity.metadata as any)?.secret_name || (activity.metadata as any)?.project_name || "Unknown",
           user_name: activity.profiles?.full_name || activity.profiles?.email || "Unknown",
           created_at: activity.created_at,
-        })) || []
+        }))
 
-      setRecentActivity(activityData)
-
-      // Update stats
-      setStats({
-        totalSecrets,
-        totalProjects,
-        totalTeamMembers: orgMembers?.length || 0,
-        recentActivity: activityData.length,
-      })
+        setRecentActivity(activityData)
+        setStats((prev) => ({ ...prev, recentActivity: activityData.length }))
+      }
     } catch (error) {
       console.error("Error fetching dashboard data:", error)
     } finally {
@@ -205,7 +222,7 @@ export default function Dashboard() {
                     <p className="text-2xl font-semibold">{stats.totalSecrets}</p>
                     <p className="text-xs text-emerald-600 flex items-center mt-1">
                       <TrendingUp className="h-3 w-3 mr-1" />
-                      +12% from last month
+                      Secure & encrypted
                     </p>
                   </div>
                   <Key className="h-8 w-8 text-slate-400" />
@@ -220,7 +237,7 @@ export default function Dashboard() {
                     <p className="text-2xl font-semibold">{stats.totalProjects}</p>
                     <p className="text-xs text-emerald-600 flex items-center mt-1">
                       <TrendingUp className="h-3 w-3 mr-1" />
-                      +3 this month
+                      Well organized
                     </p>
                   </div>
                   <Folder className="h-8 w-8 text-slate-400" />
@@ -231,11 +248,11 @@ export default function Dashboard() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-slate-600">Team Members</p>
+                    <p className="text-sm text-slate-600">Organizations</p>
                     <p className="text-2xl font-semibold">{stats.totalTeamMembers}</p>
                     <p className="text-xs text-slate-600 flex items-center mt-1">
                       <Users className="h-3 w-3 mr-1" />
-                      Across all orgs
+                      Your access
                     </p>
                   </div>
                   <Users className="h-8 w-8 text-slate-400" />

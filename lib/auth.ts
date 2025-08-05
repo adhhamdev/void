@@ -31,12 +31,15 @@ export async function getUserProfile(userId: string) {
 
 export async function getUserOrganizations(userId: string) {
   const supabase = await createClient()
+
+  // Use a direct query to avoid RLS recursion issues
   const { data: organizations, error } = await supabase
     .from("organization_members")
     .select(`
       role,
       joined_at,
-      organizations (
+      organization_id,
+      organizations!inner (
         id,
         name,
         slug,
@@ -46,22 +49,30 @@ export async function getUserOrganizations(userId: string) {
     .eq("user_id", userId)
 
   if (error) {
-    throw new Error(`Failed to fetch user organizations: ${error.message}`)
+    console.error("Error fetching organizations:", error)
+    return []
   }
 
-  return organizations
+  return organizations || []
 }
 
 export async function checkUserRole(userId: string, orgId: string): Promise<string | null> {
   const supabase = await createClient()
-  const { data, error } = await supabase.rpc("get_user_org_role", { org_id: orgId })
+
+  // Direct query to avoid RLS issues
+  const { data, error } = await supabase
+    .from("organization_members")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("organization_id", orgId)
+    .single()
 
   if (error) {
     console.error("Error checking user role:", error)
     return null
   }
 
-  return data
+  return data?.role || null
 }
 
 export async function requireRole(orgId: string, allowedRoles: string[]): Promise<void> {
@@ -70,5 +81,32 @@ export async function requireRole(orgId: string, allowedRoles: string[]): Promis
 
   if (!userRole || !allowedRoles.includes(userRole)) {
     redirect("/unauthorized")
+  }
+}
+
+export async function createDefaultOrganization(userId: string, userEmail: string) {
+  const supabase = await createClient()
+
+  try {
+    const orgSlug = `${userEmail.split("@")[0]}-org-${Date.now()}`
+    const orgName = `${userEmail.split("@")[0]}'s Organization`
+
+    // Generate a simple encryption key (in production, use proper key derivation)
+    const encryptionKey = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+
+    const { data: orgId, error } = await supabase.rpc("create_organization", {
+      org_name: orgName,
+      org_slug: orgSlug,
+      encryption_key_hash: encryptionKey,
+    })
+
+    if (error) throw error
+
+    return orgId
+  } catch (error) {
+    console.error("Error creating default organization:", error)
+    throw error
   }
 }
