@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,13 +9,182 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Shield, Key, Bell, Trash2, Download } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Shield, Key, Bell, Trash2, Download, Moon, Sun, Monitor, Loader2, Save } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
+import { useToast } from "@/hooks/use-toast"
+import { useTheme } from "next-themes"
+
+interface UserProfile {
+  id: string
+  email: string
+  full_name: string
+  avatar_url?: string
+}
+
+interface UserPreferences {
+  theme: string
+  email_notifications: boolean
+  slack_notifications: boolean
+  notification_events: {
+    secret_accessed: boolean
+    secret_modified: boolean
+    team_member_added: boolean
+    failed_login: boolean
+    api_key_usage: boolean
+  }
+  two_factor_enabled: boolean
+  session_timeout: number
+  timezone: string
+  date_format: string
+  time_format: string
+  api_rate_limit: number
+}
 
 export default function Settings() {
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(true)
-  const [emailNotifications, setEmailNotifications] = useState(true)
-  const [slackNotifications, setSlackNotifications] = useState(false)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [preferences, setPreferences] = useState<UserPreferences | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const { toast } = useToast()
+  const { theme, setTheme } = useTheme()
+
+  // Form states
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [company, setCompany] = useState("")
+
+  useEffect(() => {
+    loadUserData()
+  }, [])
+
+  const loadUserData = async () => {
+    try {
+      setIsLoading(true)
+
+      // Load profile and preferences in parallel
+      const [profileResponse, preferencesResponse] = await Promise.all([
+        fetch("/api/user/profile"),
+        fetch("/api/user/preferences"),
+      ])
+
+      if (profileResponse.ok) {
+        const profileData = await profileResponse.json()
+        setProfile(profileData.profile)
+
+        // Split full name into first and last name
+        const nameParts = profileData.profile.full_name?.split(" ") || []
+        setFirstName(nameParts[0] || "")
+        setLastName(nameParts.slice(1).join(" ") || "")
+      }
+
+      if (preferencesResponse.ok) {
+        const preferencesData = await preferencesResponse.json()
+        setPreferences(preferencesData.preferences)
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load user data",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const saveProfile = async () => {
+    if (!profile) return
+
+    setIsSaving(true)
+    try {
+      const response = await fetch("/api/user/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          full_name: `${firstName} ${lastName}`.trim(),
+          // company would need to be added to profiles table
+        }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Profile updated successfully",
+        })
+        loadUserData() // Refresh data
+      } else {
+        throw new Error("Failed to update profile")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update profile",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const savePreferences = async (updates: Partial<UserPreferences>) => {
+    if (!preferences) return
+
+    try {
+      const response = await fetch("/api/user/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setPreferences(data.preferences)
+        toast({
+          title: "Success",
+          description: "Preferences updated successfully",
+        })
+      } else {
+        throw new Error("Failed to update preferences")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update preferences",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleThemeChange = (newTheme: string) => {
+    setTheme(newTheme)
+    savePreferences({ theme: newTheme })
+  }
+
+  const handleNotificationToggle = (key: keyof UserPreferences, value: boolean) => {
+    savePreferences({ [key]: value })
+  }
+
+  const handleNotificationEventToggle = (event: string, value: boolean) => {
+    if (!preferences) return
+
+    const updatedEvents = {
+      ...preferences.notification_events,
+      [event]: value,
+    }
+    savePreferences({ notification_events: updatedEvents })
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen bg-slate-50">
+        <Sidebar />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-screen bg-slate-50">
@@ -33,8 +202,9 @@ export default function Settings() {
         {/* Main Content */}
         <main className="flex-1 overflow-auto p-6">
           <Tabs defaultValue="account" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-5 max-w-2xl">
+            <TabsList className="grid w-full grid-cols-6 max-w-3xl">
               <TabsTrigger value="account">Account</TabsTrigger>
+              <TabsTrigger value="appearance">Appearance</TabsTrigger>
               <TabsTrigger value="security">Security</TabsTrigger>
               <TabsTrigger value="notifications">Notifications</TabsTrigger>
               <TabsTrigger value="api">API Keys</TabsTrigger>
@@ -51,22 +221,76 @@ export default function Settings() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="firstName">First Name</Label>
-                      <Input id="firstName" defaultValue="Alex" />
+                      <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="lastName">Last Name</Label>
-                      <Input id="lastName" defaultValue="Chen" />
+                      <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email Address</Label>
-                    <Input id="email" type="email" defaultValue="alex@company.com" />
+                    <Input id="email" type="email" value={profile?.email || ""} disabled className="bg-slate-50" />
+                    <p className="text-xs text-slate-500">Email cannot be changed here. Contact support if needed.</p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="company">Company</Label>
-                    <Input id="company" defaultValue="Acme Corp" />
+                    <Label htmlFor="timezone">Timezone</Label>
+                    <Select
+                      value={preferences?.timezone || "UTC"}
+                      onValueChange={(value) => savePreferences({ timezone: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="UTC">UTC</SelectItem>
+                        <SelectItem value="America/New_York">Eastern Time</SelectItem>
+                        <SelectItem value="America/Chicago">Central Time</SelectItem>
+                        <SelectItem value="America/Denver">Mountain Time</SelectItem>
+                        <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
+                        <SelectItem value="Europe/London">London</SelectItem>
+                        <SelectItem value="Europe/Paris">Paris</SelectItem>
+                        <SelectItem value="Asia/Tokyo">Tokyo</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <Button className="bg-emerald-600 hover:bg-emerald-700">Save Changes</Button>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="dateFormat">Date Format</Label>
+                      <Select
+                        value={preferences?.date_format || "MM/DD/YYYY"}
+                        onValueChange={(value) => savePreferences({ date_format: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
+                          <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
+                          <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="timeFormat">Time Format</Label>
+                      <Select
+                        value={preferences?.time_format || "12h"}
+                        onValueChange={(value) => savePreferences({ time_format: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="12h">12 Hour</SelectItem>
+                          <SelectItem value="24h">24 Hour</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={saveProfile} disabled={isSaving}>
+                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Save Changes
+                  </Button>
                 </CardContent>
               </Card>
 
@@ -101,6 +325,64 @@ export default function Settings() {
               </Card>
             </TabsContent>
 
+            <TabsContent value="appearance" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Theme Preferences</CardTitle>
+                  <CardDescription>Customize the appearance of your interface</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
+                    <Label>Theme</Label>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div
+                        className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                          theme === "light"
+                            ? "border-emerald-500 bg-emerald-50"
+                            : "border-slate-200 hover:border-slate-300"
+                        }`}
+                        onClick={() => handleThemeChange("light")}
+                      >
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Sun className="h-4 w-4" />
+                          <span className="font-medium">Light</span>
+                        </div>
+                        <div className="w-full h-8 bg-white border rounded"></div>
+                      </div>
+                      <div
+                        className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                          theme === "dark"
+                            ? "border-emerald-500 bg-emerald-50"
+                            : "border-slate-200 hover:border-slate-300"
+                        }`}
+                        onClick={() => handleThemeChange("dark")}
+                      >
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Moon className="h-4 w-4" />
+                          <span className="font-medium">Dark</span>
+                        </div>
+                        <div className="w-full h-8 bg-slate-800 border rounded"></div>
+                      </div>
+                      <div
+                        className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                          theme === "system"
+                            ? "border-emerald-500 bg-emerald-50"
+                            : "border-slate-200 hover:border-slate-300"
+                        }`}
+                        onClick={() => handleThemeChange("system")}
+                      >
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Monitor className="h-4 w-4" />
+                          <span className="font-medium">System</span>
+                        </div>
+                        <div className="w-full h-8 bg-gradient-to-r from-white to-slate-800 border rounded"></div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="security" className="space-y-6">
               <Card>
                 <CardHeader>
@@ -117,74 +399,33 @@ export default function Settings() {
                       <p className="text-sm text-slate-600">Add an extra layer of security to your account</p>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Badge variant={twoFactorEnabled ? "default" : "secondary"}>
-                        {twoFactorEnabled ? "Enabled" : "Disabled"}
+                      <Badge variant={preferences?.two_factor_enabled ? "default" : "secondary"}>
+                        {preferences?.two_factor_enabled ? "Enabled" : "Disabled"}
                       </Badge>
-                      <Switch checked={twoFactorEnabled} onCheckedChange={setTwoFactorEnabled} />
+                      <Switch
+                        checked={preferences?.two_factor_enabled || false}
+                        onCheckedChange={(checked) => handleNotificationToggle("two_factor_enabled", checked)}
+                      />
                     </div>
                   </div>
                   <Separator />
-                  <div className="space-y-4">
-                    <h4 className="font-medium">Connected Accounts</h4>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-slate-900 rounded-md flex items-center justify-center">
-                            <span className="text-white text-xs font-bold">GH</span>
-                          </div>
-                          <div>
-                            <p className="font-medium">GitHub</p>
-                            <p className="text-sm text-slate-600">alex-chen</p>
-                          </div>
-                        </div>
-                        <Button variant="outline" size="sm">
-                          Disconnect
-                        </Button>
-                      </div>
-                      <div className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center">
-                            <span className="text-white text-xs font-bold">G</span>
-                          </div>
-                          <div>
-                            <p className="font-medium">Google</p>
-                            <p className="text-sm text-slate-600">alex@company.com</p>
-                          </div>
-                        </div>
-                        <Button variant="outline" size="sm">
-                          Disconnect
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Session Management</CardTitle>
-                  <CardDescription>Manage your active sessions across devices</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <p className="font-medium">Current Session</p>
-                        <p className="text-sm text-slate-600">MacBook Pro • Chrome • San Francisco, CA</p>
-                        <p className="text-xs text-slate-500">Last active: Now</p>
-                      </div>
-                      <Badge variant="default">Current</Badge>
-                    </div>
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <p className="font-medium">Mobile Session</p>
-                        <p className="text-sm text-slate-600">iPhone • Safari • San Francisco, CA</p>
-                        <p className="text-xs text-slate-500">Last active: 2 hours ago</p>
-                      </div>
-                      <Button variant="outline" size="sm">
-                        Revoke
-                      </Button>
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="sessionTimeout">Session Timeout (minutes)</Label>
+                    <Select
+                      value={preferences?.session_timeout?.toString() || "30"}
+                      onValueChange={(value) => savePreferences({ session_timeout: Number.parseInt(value) })}
+                    >
+                      <SelectTrigger className="w-48">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="15">15 minutes</SelectItem>
+                        <SelectItem value="30">30 minutes</SelectItem>
+                        <SelectItem value="60">1 hour</SelectItem>
+                        <SelectItem value="240">4 hours</SelectItem>
+                        <SelectItem value="480">8 hours</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </CardContent>
               </Card>
@@ -205,31 +446,35 @@ export default function Settings() {
                       <h4 className="font-medium">Email Notifications</h4>
                       <p className="text-sm text-slate-600">Receive notifications via email</p>
                     </div>
-                    <Switch checked={emailNotifications} onCheckedChange={setEmailNotifications} />
+                    <Switch
+                      checked={preferences?.email_notifications || false}
+                      onCheckedChange={(checked) => handleNotificationToggle("email_notifications", checked)}
+                    />
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
                       <h4 className="font-medium">Slack Integration</h4>
                       <p className="text-sm text-slate-600">Send notifications to your Slack workspace</p>
                     </div>
-                    <Switch checked={slackNotifications} onCheckedChange={setSlackNotifications} />
+                    <Switch
+                      checked={preferences?.slack_notifications || false}
+                      onCheckedChange={(checked) => handleNotificationToggle("slack_notifications", checked)}
+                    />
                   </div>
                   <Separator />
                   <div className="space-y-4">
                     <h4 className="font-medium">Event Types</h4>
                     <div className="space-y-3">
-                      {[
-                        "Secret accessed",
-                        "Secret modified",
-                        "Team member added",
-                        "Failed login attempts",
-                        "API key usage",
-                      ].map((event) => (
-                        <div key={event} className="flex items-center justify-between">
-                          <span className="text-sm">{event}</span>
-                          <Switch defaultChecked />
-                        </div>
-                      ))}
+                      {preferences?.notification_events &&
+                        Object.entries(preferences.notification_events).map(([event, enabled]) => (
+                          <div key={event} className="flex items-center justify-between">
+                            <span className="text-sm capitalize">{event.replace("_", " ")}</span>
+                            <Switch
+                              checked={enabled}
+                              onCheckedChange={(checked) => handleNotificationEventToggle(event, checked)}
+                            />
+                          </div>
+                        ))}
                     </div>
                   </div>
                 </CardContent>
@@ -246,6 +491,28 @@ export default function Settings() {
                   <CardDescription>Manage your API keys for programmatic access</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="rateLimit">API Rate Limit (requests/hour)</Label>
+                      <p className="text-sm text-slate-600">Maximum API requests per hour</p>
+                    </div>
+                    <Select
+                      value={preferences?.api_rate_limit?.toString() || "1000"}
+                      onValueChange={(value) => savePreferences({ api_rate_limit: Number.parseInt(value) })}
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="100">100</SelectItem>
+                        <SelectItem value="500">500</SelectItem>
+                        <SelectItem value="1000">1,000</SelectItem>
+                        <SelectItem value="5000">5,000</SelectItem>
+                        <SelectItem value="10000">10,000</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Separator />
                   <Button className="bg-emerald-600 hover:bg-emerald-700">
                     <Key className="mr-2 h-4 w-4" />
                     Generate New API Key
@@ -256,21 +523,6 @@ export default function Settings() {
                         <p className="font-medium">Production API Key</p>
                         <p className="text-sm text-slate-600 font-mono">sv_prod_••••••••••••••••</p>
                         <p className="text-xs text-slate-500">Created: Jan 10, 2024 • Last used: 2 hours ago</p>
-                      </div>
-                      <div className="flex space-x-2">
-                        <Button variant="outline" size="sm">
-                          Regenerate
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <p className="font-medium">Development API Key</p>
-                        <p className="text-sm text-slate-600 font-mono">sv_dev_••••••••••••••••</p>
-                        <p className="text-xs text-slate-500">Created: Jan 5, 2024 • Last used: 1 day ago</p>
                       </div>
                       <div className="flex space-x-2">
                         <Button variant="outline" size="sm">

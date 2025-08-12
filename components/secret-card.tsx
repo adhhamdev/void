@@ -11,8 +11,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { MoreHorizontal, Eye, Copy, Edit, Trash2, Key, Database, Shield, Webhook, FileText } from "lucide-react"
+import { MoreHorizontal, Eye, Copy, Edit, Trash2, Key, Database, Shield, Webhook, FileText, Share2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { SecretSharingModal } from "@/components/secret-sharing-modal"
 import Link from "next/link"
 
 interface Secret {
@@ -139,6 +140,17 @@ export function SecretCard({ secret }: SecretCardProps) {
                   Edit
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
+                <SecretSharingModal
+                  secretId={secret.id}
+                  secretName={secret.name}
+                  trigger={
+                    <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                      <Share2 className="mr-2 h-4 w-4" />
+                      Share
+                    </DropdownMenuItem>
+                  }
+                />
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleDeleteSecret} disabled={isLoading} className="text-red-600">
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
@@ -152,10 +164,22 @@ export function SecretCard({ secret }: SecretCardProps) {
       <CardContent>
         <div className="flex items-center justify-between text-sm text-slate-600">
           <span>Updated {secret.lastModified}</span>
-          <Button variant="outline" size="sm" onClick={handleCopySecret} disabled={isLoading}>
-            <Copy className="h-4 w-4 mr-1" />
-            Copy
-          </Button>
+          <div className="flex space-x-2">
+            <Button variant="outline" size="sm" onClick={handleCopySecret} disabled={isLoading}>
+              <Copy className="h-4 w-4 mr-1" />
+              Copy
+            </Button>
+            <SecretSharingModal
+              secretId={secret.id}
+              secretName={secret.name}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <Share2 className="h-4 w-4 mr-1" />
+                  Share
+                </Button>
+              }
+            />
+          </div>
         </div>
       </CardContent>
     </Card>

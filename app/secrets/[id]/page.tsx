@@ -21,11 +21,13 @@ import {
   AlertTriangle,
   CheckCircle,
   Loader2,
+  Share2,
 } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import { useParams } from "next/navigation"
+import SecretSharingModal from "@/components/SecretSharingModal"
 
 interface SecretVersion {
   id: string
@@ -447,11 +449,25 @@ export default function SecretDetail() {
             <TabsContent value="team" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Users className="mr-2 h-5 w-5" />
-                    Team Access
-                  </CardTitle>
-                  <CardDescription>Manage who can access this secret</CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center">
+                        <Users className="mr-2 h-5 w-5" />
+                        Team Access
+                      </CardTitle>
+                      <CardDescription>Manage who can access this secret</CardDescription>
+                    </div>
+                    <SecretSharingModal
+                      secretId={params.id as string}
+                      secretName="DATABASE_URL"
+                      trigger={
+                        <Button className="bg-emerald-600 hover:bg-emerald-700">
+                          <Share2 className="mr-2 h-4 w-4" />
+                          Share Secret
+                        </Button>
+                      }
+                    />
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <Table>
@@ -501,9 +517,15 @@ export default function SecretDetail() {
                           <TableCell>{member.permissions}</TableCell>
                           <TableCell>{member.lastAccess}</TableCell>
                           <TableCell>
-                            <Button variant="outline" size="sm">
-                              Edit Access
-                            </Button>
+                            <SecretSharingModal
+                              secretId={params.id as string}
+                              secretName="DATABASE_URL"
+                              trigger={
+                                <Button variant="outline" size="sm">
+                                  Edit Access
+                                </Button>
+                              }
+                            />
                           </TableCell>
                         </TableRow>
                       ))}

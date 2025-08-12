@@ -3,14 +3,14 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Plus, Search, Key, Folder, Users, Activity, TrendingUp, Clock } from "lucide-react"
+import { Plus, Key, Folder, Users, Activity, TrendingUp, Clock } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { EnvironmentSelector } from "@/components/environment-selector"
 import { CreateSecretModal } from "@/components/create-secret-modal"
 import { CreateProjectModal } from "@/components/create-project-modal"
+import { AdvancedSearch } from "@/components/advanced-search"
 import { supabase } from "@/lib/supabase/client"
 import { useAuth } from "@/components/auth-provider"
 import Link from "next/link"
@@ -34,11 +34,23 @@ interface RecentActivity {
   created_at: string
 }
 
+interface SearchFilter {
+  query: string
+  environment: string[]
+  secretType: string[]
+  dateRange: {
+    from?: Date
+    to?: Date
+  }
+  status: string[]
+  createdBy: string[]
+}
+
 export default function Dashboard() {
   const { user } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
+  const [filteredProjects, setFilteredProjects] = useState<Project[]>([])
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
-  const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     totalSecrets: 0,
@@ -111,6 +123,7 @@ export default function Dashboard() {
         )
 
         setProjects(projectsWithCounts)
+        setFilteredProjects(projectsWithCounts)
 
         // Calculate stats
         const totalSecrets = projectsWithCounts.reduce((sum, p) => sum + p.secret_count, 0)
@@ -160,11 +173,35 @@ export default function Dashboard() {
     }
   }
 
-  const filteredProjects = projects.filter(
-    (project) =>
-      project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      project.description.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+  const handleSearch = (filters: SearchFilter) => {
+    let filtered = projects
+
+    // Apply text search
+    if (filters.query) {
+      filtered = filtered.filter(
+        (project) =>
+          project.name.toLowerCase().includes(filters.query.toLowerCase()) ||
+          project.description.toLowerCase().includes(filters.query.toLowerCase()),
+      )
+    }
+
+    // Apply environment filter
+    if (filters.environment.length > 0) {
+      filtered = filtered.filter((project) => filters.environment.includes(project.environment))
+    }
+
+    // Apply date range filter (using last_activity as proxy)
+    if (filters.dateRange.from || filters.dateRange.to) {
+      filtered = filtered.filter((project) => {
+        const projectDate = new Date(project.last_activity)
+        if (filters.dateRange.from && projectDate < filters.dateRange.from) return false
+        if (filters.dateRange.to && projectDate > filters.dateRange.to) return false
+        return true
+      })
+    }
+
+    setFilteredProjects(filtered)
+  }
 
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString)
@@ -286,18 +323,15 @@ export default function Dashboard() {
             </TabsList>
 
             <TabsContent value="projects" className="space-y-6">
-              {/* Search */}
-              <div className="flex items-center space-x-4">
-                <div className="relative flex-1 max-w-sm">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
-                  <Input
-                    placeholder="Search projects..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
+              <AdvancedSearch
+                onSearch={handleSearch}
+                placeholder="Search projects..."
+                showEnvironmentFilter={true}
+                showTypeFilter={false}
+                showDateFilter={true}
+                showStatusFilter={false}
+                showUserFilter={false}
+              />
 
               {/* Projects Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -353,12 +387,14 @@ export default function Dashboard() {
                 <div className="text-center py-12">
                   <Folder className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-slate-900 mb-2">
-                    {searchQuery ? "No projects found" : "No projects yet"}
+                    {projects.length === 0 ? "No projects yet" : "No projects match your filters"}
                   </h3>
                   <p className="text-slate-600 mb-4">
-                    {searchQuery ? "Try adjusting your search terms" : "Get started by creating your first project"}
+                    {projects.length === 0
+                      ? "Get started by creating your first project"
+                      : "Try adjusting your search terms or filters"}
                   </p>
-                  {!searchQuery && <CreateProjectModal />}
+                  {projects.length === 0 && <CreateProjectModal />}
                 </div>
               )}
             </TabsContent>

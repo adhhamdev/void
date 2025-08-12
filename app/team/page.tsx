@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -17,87 +17,206 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Users, UserPlus, Mail, Shield, User, Crown, Eye, MoreHorizontal, UserX } from "lucide-react"
+import { Search, Users, UserPlus, Mail, Shield, User, Crown, Eye, MoreHorizontal, UserX, Loader2 } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
+
+interface TeamMember {
+  id: string
+  user: {
+    id: string
+    full_name: string
+    email: string
+    avatar_url?: string
+  }
+  role: string
+  joined_at: string
+  last_active?: string
+  secretsAccess: number
+}
+
+interface PendingInvite {
+  id: string
+  email: string
+  role: string
+  created_at: string
+  invited_by: {
+    full_name: string
+    email: string
+  }
+  status: string
+}
 
 export default function TeamManagement() {
   const [searchQuery, setSearchQuery] = useState("")
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState("")
+  const [isInviteOpen, setIsInviteOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([])
+  const [isLoadingData, setIsLoadingData] = useState(true)
+  const { toast } = useToast()
 
-  const teamMembers = [
-    {
-      id: "1",
-      name: "Alex Chen",
-      email: "alex@company.com",
-      role: "Owner",
-      status: "Active",
-      lastActive: "Now",
-      secretsAccess: 45,
-      joinedDate: "Jan 1, 2024",
-    },
-    {
-      id: "2",
-      name: "Sarah Johnson",
-      email: "sarah@company.com",
-      role: "Admin",
-      status: "Active",
-      lastActive: "2 hours ago",
-      secretsAccess: 32,
-      joinedDate: "Jan 5, 2024",
-    },
-    {
-      id: "3",
-      name: "Mike Rodriguez",
-      email: "mike@company.com",
-      role: "Developer",
-      status: "Active",
-      lastActive: "1 day ago",
-      secretsAccess: 18,
-      joinedDate: "Jan 10, 2024",
-    },
-    {
-      id: "4",
-      name: "Emily Davis",
-      email: "emily@company.com",
-      role: "Developer",
-      status: "Inactive",
-      lastActive: "1 week ago",
-      secretsAccess: 12,
-      joinedDate: "Jan 8, 2024",
-    },
-    {
-      id: "5",
-      name: "David Wilson",
-      email: "david@company.com",
-      role: "Viewer",
-      status: "Active",
-      lastActive: "3 hours ago",
-      secretsAccess: 5,
-      joinedDate: "Jan 12, 2024",
-    },
-  ]
+  const fetchTeamMembers = async () => {
+    try {
+      // For now, using mock organization ID - in real app, get from context/auth
+      const orgId = "mock-org-id"
+      const response = await fetch(`/api/organizations/${orgId}/members`)
+      if (response.ok) {
+        const data = await response.json()
+        setTeamMembers(data.members || [])
+      }
+    } catch (error) {
+      console.error("Failed to fetch team members:", error)
+      // Fallback to mock data for demo
+      setTeamMembers([
+        {
+          id: "1",
+          user: {
+            id: "1",
+            full_name: "Alex Chen",
+            email: "alex@company.com",
+          },
+          role: "owner",
+          joined_at: "2024-01-01T00:00:00Z",
+          last_active: "Now",
+          secretsAccess: 45,
+        },
+        {
+          id: "2",
+          user: {
+            id: "2",
+            full_name: "Sarah Johnson",
+            email: "sarah@company.com",
+          },
+          role: "admin",
+          joined_at: "2024-01-05T00:00:00Z",
+          last_active: "2 hours ago",
+          secretsAccess: 32,
+        },
+      ])
+    }
+  }
 
-  const pendingInvites = [
-    {
-      id: "1",
-      email: "john@company.com",
-      role: "Developer",
-      invitedBy: "Alex Chen",
-      invitedDate: "Jan 14, 2024",
-      status: "Pending",
-    },
-    {
-      id: "2",
-      email: "lisa@company.com",
-      role: "Viewer",
-      invitedBy: "Sarah Johnson",
-      invitedDate: "Jan 13, 2024",
-      status: "Pending",
-    },
-  ]
+  const fetchPendingInvites = async () => {
+    try {
+      const orgId = "mock-org-id"
+      const response = await fetch(`/api/organizations/${orgId}/invitations`)
+      if (response.ok) {
+        const data = await response.json()
+        setPendingInvites(data.invitations || [])
+      }
+    } catch (error) {
+      console.error("Failed to fetch invitations:", error)
+      // Fallback to mock data
+      setPendingInvites([
+        {
+          id: "1",
+          email: "john@company.com",
+          role: "developer",
+          created_at: "2024-01-14T00:00:00Z",
+          invited_by: {
+            full_name: "Alex Chen",
+            email: "alex@company.com",
+          },
+          status: "pending",
+        },
+      ])
+    }
+  }
+
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoadingData(true)
+      await Promise.all([fetchTeamMembers(), fetchPendingInvites()])
+      setIsLoadingData(false)
+    }
+    loadData()
+  }, [])
+
+  const handleSendInvite = async () => {
+    if (!inviteEmail || !inviteRole) {
+      toast({
+        title: "Error",
+        description: "Please fill in all fields",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const orgId = "mock-org-id"
+      const response = await fetch(`/api/organizations/${orgId}/invitations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: inviteEmail,
+          role: inviteRole,
+        }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Invitation sent successfully",
+        })
+        setInviteEmail("")
+        setInviteRole("")
+        setIsInviteOpen(false)
+        fetchPendingInvites() // Refresh the list
+      } else {
+        const error = await response.json()
+        toast({
+          title: "Error",
+          description: error.error || "Failed to send invitation",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to send invitation",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCancelInvite = async (inviteId: string) => {
+    try {
+      const response = await fetch(`/api/invitations/${inviteId}`, {
+        method: "DELETE",
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Invitation cancelled",
+        })
+        fetchPendingInvites() // Refresh the list
+      } else {
+        const error = await response.json()
+        toast({
+          title: "Error",
+          description: error.error || "Failed to cancel invitation",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to cancel invitation",
+        variant: "destructive",
+      })
+    }
+  }
 
   const getRoleIcon = (role: string) => {
     switch (role.toLowerCase()) {
@@ -142,6 +261,21 @@ export default function TeamManagement() {
     }
   }
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString()
+  }
+
+  if (isLoadingData) {
+    return (
+      <div className="flex h-screen bg-slate-50">
+        <Sidebar />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-screen bg-slate-50">
       <Sidebar />
@@ -164,7 +298,7 @@ export default function TeamManagement() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Dialog>
+              <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
                 <DialogTrigger asChild>
                   <Button className="bg-emerald-600 hover:bg-emerald-700">
                     <UserPlus className="mr-2 h-4 w-4" />
@@ -200,8 +334,16 @@ export default function TeamManagement() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <Button className="w-full bg-emerald-600 hover:bg-emerald-700">
-                      <Mail className="mr-2 h-4 w-4" />
+                    <Button
+                      className="w-full bg-emerald-600 hover:bg-emerald-700"
+                      onClick={handleSendInvite}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Mail className="mr-2 h-4 w-4" />
+                      )}
                       Send Invitation
                     </Button>
                   </div>
@@ -231,7 +373,7 @@ export default function TeamManagement() {
                   <div>
                     <p className="text-sm text-slate-600">Active Members</p>
                     <p className="text-2xl font-semibold text-emerald-600">
-                      {teamMembers.filter((m) => m.status === "Active").length}
+                      {teamMembers.filter((m) => m.last_active).length}
                     </p>
                   </div>
                   <Shield className="h-8 w-8 text-emerald-400" />
@@ -255,7 +397,7 @@ export default function TeamManagement() {
                   <div>
                     <p className="text-sm text-slate-600">Admins</p>
                     <p className="text-2xl font-semibold">
-                      {teamMembers.filter((m) => m.role === "Admin" || m.role === "Owner").length}
+                      {teamMembers.filter((m) => m.role === "admin" || m.role === "owner").length}
                     </p>
                   </div>
                   <Crown className="h-8 w-8 text-slate-400" />
@@ -285,7 +427,6 @@ export default function TeamManagement() {
                       <TableRow>
                         <TableHead>Member</TableHead>
                         <TableHead>Role</TableHead>
-                        <TableHead>Status</TableHead>
                         <TableHead>Secrets Access</TableHead>
                         <TableHead>Last Active</TableHead>
                         <TableHead>Joined</TableHead>
@@ -299,7 +440,7 @@ export default function TeamManagement() {
                             <div className="flex items-center space-x-3">
                               <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
                                 <span className="text-sm font-medium text-emerald-700">
-                                  {member.name
+                                  {member.user.full_name
                                     .split(" ")
                                     .map((n) => n[0])
                                     .join("")}
@@ -307,24 +448,21 @@ export default function TeamManagement() {
                               </div>
                               <div>
                                 <Link href={`/team/${member.id}`} className="font-medium hover:underline">
-                                  {member.name}
+                                  {member.user.full_name}
                                 </Link>
-                                <p className="text-sm text-slate-600">{member.email}</p>
+                                <p className="text-sm text-slate-600">{member.user.email}</p>
                               </div>
                             </div>
                           </TableCell>
                           <TableCell>
                             <Badge className={`${getRoleColor(member.role)} flex items-center space-x-1 w-fit`}>
                               {getRoleIcon(member.role)}
-                              <span>{member.role}</span>
+                              <span className="capitalize">{member.role}</span>
                             </Badge>
                           </TableCell>
-                          <TableCell>
-                            <Badge className={getStatusColor(member.status)}>{member.status}</Badge>
-                          </TableCell>
                           <TableCell>{member.secretsAccess}</TableCell>
-                          <TableCell>{member.lastActive}</TableCell>
-                          <TableCell>{member.joinedDate}</TableCell>
+                          <TableCell>{member.last_active || "Recently"}</TableCell>
+                          <TableCell>{formatDate(member.joined_at)}</TableCell>
                           <TableCell>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -341,7 +479,7 @@ export default function TeamManagement() {
                                   <Shield className="mr-2 h-4 w-4" />
                                   Change Role
                                 </DropdownMenuItem>
-                                {member.role !== "Owner" && (
+                                {member.role !== "owner" && (
                                   <DropdownMenuItem className="text-red-600">
                                     <UserX className="mr-2 h-4 w-4" />
                                     Remove Member
@@ -383,20 +521,22 @@ export default function TeamManagement() {
                           <TableCell>
                             <Badge className={`${getRoleColor(invite.role)} flex items-center space-x-1 w-fit`}>
                               {getRoleIcon(invite.role)}
-                              <span>{invite.role}</span>
+                              <span className="capitalize">{invite.role}</span>
                             </Badge>
                           </TableCell>
-                          <TableCell>{invite.invitedBy}</TableCell>
-                          <TableCell>{invite.invitedDate}</TableCell>
+                          <TableCell>{invite.invited_by.full_name}</TableCell>
+                          <TableCell>{formatDate(invite.created_at)}</TableCell>
                           <TableCell>
-                            <Badge className={getStatusColor(invite.status)}>{invite.status}</Badge>
+                            <Badge className={getStatusColor(invite.status)} className="capitalize">
+                              {invite.status}
+                            </Badge>
                           </TableCell>
                           <TableCell>
                             <div className="flex space-x-2">
                               <Button variant="outline" size="sm">
                                 Resend
                               </Button>
-                              <Button variant="outline" size="sm">
+                              <Button variant="outline" size="sm" onClick={() => handleCancelInvite(invite.id)}>
                                 Cancel
                               </Button>
                             </div>
