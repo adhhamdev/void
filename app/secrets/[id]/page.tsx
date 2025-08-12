@@ -27,7 +27,7 @@ import { Sidebar } from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import { useParams } from "next/navigation"
-import SecretSharingModal from "@/components/secret-sharing-modal"
+import {SecretSharingModal} from "@/components/secret-sharing-modal"
 
 interface SecretVersion {
   id: string
