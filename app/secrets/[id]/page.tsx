@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,96 +9,130 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, Eye, EyeOff, Copy, Save, History, Users, Shield, AlertTriangle, CheckCircle } from "lucide-react"
+import {
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  Copy,
+  Save,
+  History,
+  Users,
+  Shield,
+  AlertTriangle,
+  CheckCircle,
+  Loader2,
+} from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
+import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
+import { useParams } from "next/navigation"
+
+interface SecretVersion {
+  id: string
+  version: number
+  encrypted_value: string
+  created_at: string
+  profiles: {
+    full_name: string | null
+    email: string
+  } | null
+  status: "current" | "archived"
+}
 
 export default function SecretDetail() {
+  const params = useParams()
+  const { toast } = useToast()
   const [isVisible, setIsVisible] = useState(false)
   const [secretValue, setSecretValue] = useState("sk_live_51H7J8K2eZvKYlo2C...")
   const [description, setDescription] = useState("Primary Stripe secret key for payment processing")
+  const [versions, setVersions] = useState<SecretVersion[]>([])
+  const [versionsLoading, setVersionsLoading] = useState(false)
+  const [restoringVersion, setRestoringVersion] = useState<number | null>(null)
 
-  const versions = [
-    {
-      id: "v3",
-      value: "sk_live_51H7J8K2eZvKYlo2C...",
-      createdBy: "Alex Chen",
-      createdAt: "2024-01-15 14:30:25",
-      status: "current",
-      changes: "Updated key rotation",
-    },
-    {
-      id: "v2",
-      value: "sk_live_51G6I7J1dYuJXkn1B...",
-      createdBy: "Sarah Johnson",
-      createdAt: "2024-01-10 09:15:42",
-      status: "archived",
-      changes: "Security update",
-    },
-    {
-      id: "v1",
-      value: "sk_live_51F5H6I0cXtIWjm0A...",
-      createdBy: "Mike Rodriguez",
-      createdAt: "2024-01-05 16:22:18",
-      status: "archived",
-      changes: "Initial creation",
-    },
-  ]
+  useEffect(() => {
+    if (params.id) {
+      fetchVersions()
+    }
+  }, [params.id])
 
-  const accessLog = [
-    {
-      user: "Production API",
-      action: "Retrieved",
-      timestamp: "2024-01-15 14:45:12",
-      ip: "10.0.1.100",
-      status: "success",
-    },
-    {
-      user: "Alex Chen",
-      action: "Updated",
-      timestamp: "2024-01-15 14:30:25",
-      ip: "192.168.1.100",
-      status: "success",
-    },
-    {
-      user: "Staging API",
-      action: "Retrieved",
-      timestamp: "2024-01-15 12:20:33",
-      ip: "10.0.2.50",
-      status: "success",
-    },
-    {
-      user: "Unknown",
-      action: "Failed Access",
-      timestamp: "2024-01-15 11:15:45",
-      ip: "203.0.113.42",
-      status: "failed",
-    },
-  ]
+  const fetchVersions = async () => {
+    setVersionsLoading(true)
+    try {
+      const response = await fetch(`/api/secrets/${params.id}/versions`)
+      if (!response.ok) {
+        throw new Error("Failed to fetch versions")
+      }
+      const data = await response.json()
+      setVersions(data.versions || [])
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to fetch version history",
+        variant: "destructive",
+      })
+    } finally {
+      setVersionsLoading(false)
+    }
+  }
 
-  const teamAccess = [
-    {
-      name: "Alex Chen",
-      email: "alex@company.com",
-      role: "Admin",
-      permissions: "Full Access",
-      lastAccess: "2 hours ago",
-    },
-    {
-      name: "Sarah Johnson",
-      email: "sarah@company.com",
-      role: "Developer",
-      permissions: "Read/Write",
-      lastAccess: "1 day ago",
-    },
-    {
-      name: "Mike Rodriguez",
-      email: "mike@company.com",
-      role: "Developer",
-      permissions: "Read Only",
-      lastAccess: "3 days ago",
-    },
-  ]
+  const handleRestoreVersion = async (version: number) => {
+    if (
+      !confirm(
+        `Are you sure you want to restore to version ${version}? This will create a new version with the restored content.`,
+      )
+    ) {
+      return
+    }
+
+    setRestoringVersion(version)
+    try {
+      const response = await fetch(`/api/secrets/${params.id}/restore`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ version }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || "Failed to restore version")
+      }
+
+      toast({
+        title: "Version restored",
+        description: `Successfully restored to version ${version}`,
+      })
+
+      // Refresh versions list
+      await fetchVersions()
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to restore version",
+        variant: "destructive",
+      })
+    } finally {
+      setRestoringVersion(null)
+    }
+  }
+
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60))
+
+    if (diffInHours < 1) return "Just now"
+    if (diffInHours < 24) return `${diffInHours}h ago`
+    const diffInDays = Math.floor(diffInHours / 24)
+    if (diffInDays < 7) return `${diffInDays}d ago`
+    return date.toLocaleDateString()
+  }
+
+  const getValuePreview = (encryptedValue: string) => {
+    // Show first few characters of encrypted value as preview
+    return encryptedValue.substring(0, 20) + "..."
+  }
 
   return (
     <div className="flex h-screen bg-slate-50">
@@ -226,7 +260,7 @@ export default function SecretDetail() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-slate-600">Version</span>
-                        <span className="text-sm">v3</span>
+                        <span className="text-sm">v{versions.find((v) => v.status === "current")?.version || 1}</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -264,42 +298,68 @@ export default function SecretDetail() {
                   <CardDescription>Track changes and revert to previous versions if needed</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Version</TableHead>
-                        <TableHead>Value Preview</TableHead>
-                        <TableHead>Created By</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Changes</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {versions.map((version) => (
-                        <TableRow key={version.id}>
-                          <TableCell className="font-medium">{version.id}</TableCell>
-                          <TableCell className="font-mono text-sm">{version.value}</TableCell>
-                          <TableCell>{version.createdBy}</TableCell>
-                          <TableCell>{version.createdAt}</TableCell>
-                          <TableCell>{version.changes}</TableCell>
-                          <TableCell>
-                            <Badge variant={version.status === "current" ? "default" : "secondary"}>
-                              {version.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {version.status !== "current" && (
-                              <Button variant="outline" size="sm">
-                                Restore
-                              </Button>
-                            )}
-                          </TableCell>
+                  {versionsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                      <span>Loading version history...</span>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Version</TableHead>
+                          <TableHead>Value Preview</TableHead>
+                          <TableHead>Created By</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Actions</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {versions.map((version) => (
+                          <TableRow key={version.id}>
+                            <TableCell className="font-medium">v{version.version}</TableCell>
+                            <TableCell className="font-mono text-sm">
+                              {getValuePreview(version.encrypted_value)}
+                            </TableCell>
+                            <TableCell>{version.profiles?.full_name || version.profiles?.email || "Unknown"}</TableCell>
+                            <TableCell>{formatTimeAgo(version.created_at)}</TableCell>
+                            <TableCell>
+                              <Badge variant={version.status === "current" ? "default" : "secondary"}>
+                                {version.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {version.status !== "current" && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleRestoreVersion(version.version)}
+                                  disabled={restoringVersion === version.version}
+                                >
+                                  {restoringVersion === version.version ? (
+                                    <>
+                                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                      Restoring...
+                                    </>
+                                  ) : (
+                                    "Restore"
+                                  )}
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {versions.length === 0 && !versionsLoading && (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center py-8 text-slate-500">
+                              No version history available
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -322,7 +382,36 @@ export default function SecretDetail() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {accessLog.map((log, index) => (
+                      {[
+                        {
+                          user: "Production API",
+                          action: "Retrieved",
+                          timestamp: "2024-01-15 14:45:12",
+                          ip: "10.0.1.100",
+                          status: "success",
+                        },
+                        {
+                          user: "Alex Chen",
+                          action: "Updated",
+                          timestamp: "2024-01-15 14:30:25",
+                          ip: "192.168.1.100",
+                          status: "success",
+                        },
+                        {
+                          user: "Staging API",
+                          action: "Retrieved",
+                          timestamp: "2024-01-15 12:20:33",
+                          ip: "10.0.2.50",
+                          status: "success",
+                        },
+                        {
+                          user: "Unknown",
+                          action: "Failed Access",
+                          timestamp: "2024-01-15 11:15:45",
+                          ip: "203.0.113.42",
+                          status: "failed",
+                        },
+                      ].map((log, index) => (
                         <TableRow key={index}>
                           <TableCell>{log.user}</TableCell>
                           <TableCell>{log.action}</TableCell>
@@ -376,7 +465,29 @@ export default function SecretDetail() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {teamAccess.map((member, index) => (
+                      {[
+                        {
+                          name: "Alex Chen",
+                          email: "alex@company.com",
+                          role: "Admin",
+                          permissions: "Full Access",
+                          lastAccess: "2 hours ago",
+                        },
+                        {
+                          name: "Sarah Johnson",
+                          email: "sarah@company.com",
+                          role: "Developer",
+                          permissions: "Read/Write",
+                          lastAccess: "1 day ago",
+                        },
+                        {
+                          name: "Mike Rodriguez",
+                          email: "mike@company.com",
+                          role: "Developer",
+                          permissions: "Read Only",
+                          lastAccess: "3 days ago",
+                        },
+                      ].map((member, index) => (
                         <TableRow key={index}>
                           <TableCell>
                             <div>
