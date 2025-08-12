@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +15,7 @@ import {
 import { MoreHorizontal, Eye, Copy, Edit, Trash2, Key, Database, Shield, Webhook, FileText, Share2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { SecretSharingModal } from "@/components/secret-sharing-modal"
+import { useBulkOperations } from "@/contexts/bulk-operations-context"
 import Link from "next/link"
 
 interface Secret {
@@ -62,6 +64,17 @@ export function SecretCard({ secret }: SecretCardProps) {
   const [isLoading, setIsLoading] = useState(false)
   const Icon = getSecretIcon(secret.type)
 
+  const { bulkMode, isSelected, selectItem, deselectItem } = useBulkOperations()
+  const selected = isSelected(secret.id)
+
+  const handleSelectionChange = (checked: boolean) => {
+    if (checked) {
+      selectItem(secret.id)
+    } else {
+      deselectItem(secret.id)
+    }
+  }
+
   const handleCopySecret = async () => {
     setIsLoading(true)
     try {
@@ -105,10 +118,11 @@ export function SecretCard({ secret }: SecretCardProps) {
   }
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className={`hover:shadow-md transition-shadow ${selected ? "ring-2 ring-emerald-500 bg-emerald-50" : ""}`}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
+            {bulkMode && <Checkbox checked={selected} onCheckedChange={handleSelectionChange} className="mr-2" />}
             <Icon className="h-5 w-5 text-slate-500" />
             <CardTitle className="text-base">
               <Link href={`/secrets/${secret.id}`} className="hover:underline">
