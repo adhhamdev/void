@@ -25,14 +25,25 @@ export async function middleware(request: NextRequest) {
     },
   )
 
-  // Refresh session if expired
+  // Refresh session if expired - this is important for magic links
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser()
+
+  // Log authentication status for debugging
+  if (process.env.NODE_ENV === "development") {
+    console.log("Middleware - User:", user?.email || "Not authenticated")
+    console.log("Middleware - Path:", request.nextUrl.pathname)
+  }
 
   // Protected routes
   const protectedPaths = ["/dashboard", "/projects", "/secrets", "/team", "/settings", "/logs", "/folders"]
   const isProtectedPath = protectedPaths.some((path) => request.nextUrl.pathname.startsWith(path))
+
+  // Auth routes that authenticated users shouldn't access
+  const authPaths = ["/auth"]
+  const isAuthPath = authPaths.some((path) => request.nextUrl.pathname.startsWith(path))
 
   if (isProtectedPath && !user) {
     const url = request.nextUrl.clone()
@@ -40,8 +51,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Redirect authenticated users away from auth pages
-  if (request.nextUrl.pathname.startsWith("/auth") && user) {
+  // Redirect authenticated users away from auth pages (except callback and error pages)
+  if (
+    isAuthPath &&
+    user &&
+    !request.nextUrl.pathname.includes("/callback") &&
+    !request.nextUrl.pathname.includes("/error")
+  ) {
     const url = request.nextUrl.clone()
     url.pathname = "/dashboard"
     return NextResponse.redirect(url)

@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Github, Mail, Shield } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import { MagicLinkForm } from "@/components/magic-link-form"
 
 export default function AuthPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -43,27 +44,6 @@ export default function AuthPage() {
         if (error) throw error
         router.push("/dashboard")
       }
-    } catch (error: any) {
-      setError(error.message)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleMagicLink = async () => {
-    setIsLoading(true)
-    setError("")
-    setMessage("")
-
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
-      })
-      if (error) throw error
-      setMessage("Check your email for the magic link!")
     } catch (error: any) {
       setError(error.message)
     } finally {
@@ -108,11 +88,21 @@ export default function AuthPage() {
             <CardDescription>Sign in to your account or create a new one</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="signin" className="space-y-4">
-              <TabsList className="grid w-full grid-cols-2">
+            <Tabs defaultValue="magic-link" className="space-y-4">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="magic-link">Magic Link</TabsTrigger>
                 <TabsTrigger value="signin">Sign In</TabsTrigger>
                 <TabsTrigger value="signup">Sign Up</TabsTrigger>
               </TabsList>
+
+              <TabsContent value="magic-link" className="space-y-4">
+                <MagicLinkForm
+                  onSuccess={() => {
+                    setMessage("Check your email for the magic link! Click the link to sign in securely.")
+                    setError("")
+                  }}
+                />
+              </TabsContent>
 
               <TabsContent value="signin" className="space-y-4">
                 <div className="space-y-4">
@@ -214,18 +204,6 @@ export default function AuthPage() {
               >
                 <Mail className="mr-2 h-4 w-4" />
                 Google
-              </Button>
-            </div>
-
-            {/* Magic Link */}
-            <div className="mt-4">
-              <Button
-                variant="ghost"
-                onClick={handleMagicLink}
-                disabled={isLoading || !email}
-                className="w-full text-sm"
-              >
-                Send magic link instead
               </Button>
             </div>
 

@@ -21,7 +21,7 @@ import { Plus, Loader2 } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
 import { useAuth } from "@/components/auth-provider"
 import { useToast } from "@/hooks/use-toast"
-import { generateMasterKey } from "@/lib/crypto"
+import { createDefaultOrganization } from "@/lib/client-auth"
 
 interface CreateProjectModalProps {
   trigger?: React.ReactNode
@@ -44,28 +44,19 @@ export function CreateProjectModal({ trigger }: CreateProjectModalProps) {
 
     setLoading(true)
     try {
-      // First, create or get user's default organization
+      // Get user's organization or create one
+      let organizationId: string
+
       const { data: orgMember } = await supabase
         .from("organization_members")
-        .select("organization_id, organizations(*)")
+        .select("organization_id")
         .eq("user_id", user.id)
+        .limit(1)
         .single()
-
-      let organizationId: string
 
       if (!orgMember) {
         // Create default organization for user
-        const orgSlug = `${user.email?.split("@")[0]}-org-${Date.now()}`
-        const encryptionKey = generateMasterKey()
-
-        const { data: newOrg, error: orgError } = await supabase.rpc("create_organization", {
-          org_name: `${user.email?.split("@")[0]}'s Organization`,
-          org_slug: orgSlug,
-          encryption_key_hash: encryptionKey,
-        })
-
-        if (orgError) throw orgError
-        organizationId = newOrg
+        organizationId = await createDefaultOrganization(user.id, user.email!)
       } else {
         organizationId = orgMember.organization_id
       }
@@ -108,6 +99,7 @@ export function CreateProjectModal({ trigger }: CreateProjectModalProps) {
       // Refresh the page to show new project
       window.location.reload()
     } catch (error: any) {
+      console.error("Error creating project:", error)
       toast({
         title: "Error",
         description: error.message || "Failed to create project",

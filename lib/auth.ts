@@ -83,30 +83,3 @@ export async function requireRole(orgId: string, allowedRoles: string[]): Promis
     redirect("/unauthorized")
   }
 }
-
-export async function createDefaultOrganization(userId: string, userEmail: string) {
-  const supabase = await createClient()
-
-  try {
-    const orgSlug = `${userEmail.split("@")[0]}-org-${Date.now()}`
-    const orgName = `${userEmail.split("@")[0]}'s Organization`
-
-    // Generate a simple encryption key (in production, use proper key derivation)
-    const encryptionKey = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("")
-
-    const { data: orgId, error } = await supabase.rpc("create_organization", {
-      org_name: orgName,
-      org_slug: orgSlug,
-      encryption_key_hash: encryptionKey,
-    })
-
-    if (error) throw error
-
-    return orgId
-  } catch (error) {
-    console.error("Error creating default organization:", error)
-    throw error
-  }
-}

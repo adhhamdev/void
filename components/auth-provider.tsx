@@ -5,7 +5,7 @@ import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
 import type { User } from "@supabase/supabase-js"
 import { supabase } from "@/lib/supabase/client"
-import { createDefaultOrganization } from "@/lib/auth"
+import { createDefaultOrganization, checkUserHasOrganization } from "@/lib/client-auth"
 
 interface AuthContextType {
   user: User | null
@@ -48,14 +48,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           })
 
           // Check if user has an organization, create one if not
-          const { data: existingMember } = await supabase
-            .from("organization_members")
-            .select("organization_id")
-            .eq("user_id", session.user.id)
-            .limit(1)
-            .single()
+          const hasOrganization = await checkUserHasOrganization(session.user.id)
 
-          if (!existingMember && session.user.email) {
+          if (!hasOrganization && session.user.email) {
             await createDefaultOrganization(session.user.id, session.user.email)
           }
         } catch (error) {

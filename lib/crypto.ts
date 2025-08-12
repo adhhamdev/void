@@ -15,10 +15,10 @@ export class OrganizationCrypto {
   }
 
   // Encrypt secret value
-  encryptSecret(value: string): { encryptedValue: string; valueHash: string } {
+    encryptSecret(value: string): { encryptedValue: string; valueHash: string } {
     const key = this.deriveKey()
     const iv = crypto.randomBytes(16)
-    const cipher = crypto.createCipher("aes-256-cbc", key)
+    const cipher = crypto.createCipheriv("aes-256-cbc", key, iv)
 
     let encrypted = cipher.update(value, "utf8", "hex")
     encrypted += cipher.final("hex")
@@ -35,7 +35,7 @@ export class OrganizationCrypto {
     const [ivHex, encrypted] = encryptedValue.split(":")
     const iv = Buffer.from(ivHex, "hex")
 
-    const decipher = crypto.createDecipher("aes-256-cbc", key)
+    const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv)
     let decrypted = decipher.update(encrypted, "hex", "utf8")
     decrypted += decipher.final("utf8")
 
@@ -59,12 +59,28 @@ export class OrganizationCrypto {
   }
 }
 
-// Generate master encryption key
+// Generate master encryption key for client-side use
 export function generateMasterKey(): string {
-  return crypto.randomBytes(32).toString("hex")
+  if (typeof window !== "undefined") {
+    // Client-side: use Web Crypto API
+    const array = new Uint8Array(32)
+    crypto.getRandomValues(array)
+    return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join("")
+  } else {
+    // Server-side: use Node.js crypto
+    return crypto.randomBytes(32).toString("hex")
+  }
 }
 
 // Generate salt for key derivation
 export function generateSalt(): string {
-  return crypto.randomBytes(16).toString("hex")
+  if (typeof window !== "undefined") {
+    // Client-side: use Web Crypto API
+    const array = new Uint8Array(16)
+    crypto.getRandomValues(array)
+    return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join("")
+  } else {
+    // Server-side: use Node.js crypto
+    return crypto.randomBytes(16).toString("hex")
+  }
 }
